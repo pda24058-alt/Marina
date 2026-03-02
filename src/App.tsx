@@ -35,6 +35,14 @@ export default function App() {
   const [selectedBook, setSelectedBook] = useState<GoogleBook | null>(null);
   const [recommendations, setRecommendations] = useState<BookRecommendation[]>([]);
   const [loadingRecs, setLoadingRecs] = useState(false);
+  const [apiKeyMissing, setApiKeyMissing] = useState(false);
+
+  useEffect(() => {
+    const key = typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : (import.meta.env?.VITE_GEMINI_API_KEY as string);
+    if (!key || key === 'undefined') {
+      setApiKeyMissing(true);
+    }
+  }, []);
 
   const searchBooks = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -75,6 +83,14 @@ export default function App() {
     <div className="min-h-screen flex flex-col font-sans">
       {/* Header */}
       <header className="sticky top-0 z-30 bg-[#FDFCFB]/80 backdrop-blur-md border-b border-black/5">
+        {apiKeyMissing && (
+          <div className="bg-amber-50 border-b border-amber-100 px-4 py-2 text-center">
+            <p className="text-xs font-medium text-amber-800 flex items-center justify-center gap-2">
+              <Sparkles className="w-3 h-3" />
+              AI Recommendations are disabled. Please set GEMINI_API_KEY in your environment variables.
+            </p>
+          </div>
+        )}
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center">
