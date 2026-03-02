@@ -37,16 +37,28 @@ export default function App() {
   const [recommendations, setRecommendations] = useState<BookRecommendation[]>([]);
   const [loadingRecs, setLoadingRecs] = useState(false);
   const [apiKeyMissing, setApiKeyMissing] = useState(false);
+  const [supabaseMissing, setSupabaseMissing] = useState(false);
   const [library, setLibrary] = useState<SavedBook[]>([]);
   const [view, setView] = useState<'discover' | 'library'>('discover');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    const checkKeys = () => {
+      const gKey = typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : (import.meta.env?.VITE_GEMINI_API_KEY as string);
+      if (!gKey || gKey === 'undefined' || gKey === '') {
+        setApiKeyMissing(true);
+      }
+
+      const sUrl = typeof process !== 'undefined' ? process.env.SUPABASE_URL : (import.meta.env?.VITE_SUPABASE_URL as string);
+      const sKey = typeof process !== 'undefined' ? process.env.SUPABASE_ANON_KEY : (import.meta.env?.VITE_SUPABASE_ANON_KEY as string);
+      
+      if (!sUrl || sUrl === 'undefined' || sUrl === '' || !sKey || sKey === 'undefined' || sKey === '') {
+        setSupabaseMissing(true);
+      }
+    };
+
+    checkKeys();
     fetchLibrary();
-    const key = typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : (import.meta.env?.VITE_GEMINI_API_KEY as string);
-    if (!key || key === 'undefined' || key === '') {
-      setApiKeyMissing(true);
-    }
   }, []);
 
   const fetchLibrary = async () => {
@@ -132,6 +144,14 @@ export default function App() {
             <p className="text-xs font-medium text-amber-800 flex items-center justify-center gap-2">
               <Sparkles className="w-3 h-3" />
               AI Recommendations are disabled. Please set GEMINI_API_KEY in your environment variables.
+            </p>
+          </div>
+        )}
+        {supabaseMissing && (
+          <div className="bg-red-50 border-b border-red-100 px-4 py-2 text-center">
+            <p className="text-xs font-medium text-red-800 flex items-center justify-center gap-2">
+              <Bookmark className="w-3 h-3" />
+              Library features are disabled. Please set SUPABASE_URL and SUPABASE_ANON_KEY.
             </p>
           </div>
         )}

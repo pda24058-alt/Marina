@@ -1,9 +1,26 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
+const getEnvVar = (name: string): string => {
+  if (typeof process !== 'undefined' && process.env && process.env[name]) {
+    return process.env[name] as string;
+  }
+  // @ts-ignore - Vite specific
+  if (import.meta.env && import.meta.env[`VITE_${name}`]) {
+    // @ts-ignore
+    return import.meta.env[`VITE_${name}`] as string;
+  }
+  return '';
+};
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabaseUrl = getEnvVar('SUPABASE_URL');
+const supabaseAnonKey = getEnvVar('SUPABASE_ANON_KEY');
+
+// Initialize with placeholders if missing to prevent crash on module load
+// The app will show an error state instead of a white screen
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co', 
+  supabaseAnonKey || 'placeholder'
+);
 
 export interface SavedBook {
   id?: string;
