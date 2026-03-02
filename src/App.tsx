@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { getBookRecommendations, type BookRecommendation } from './services/geminiService';
+import { supabase, saveBookToLibrary, getLibraryBooks, removeBookFromLibrary, type SavedBook } from './services/supabaseClient';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -36,13 +37,56 @@ export default function App() {
   const [recommendations, setRecommendations] = useState<BookRecommendation[]>([]);
   const [loadingRecs, setLoadingRecs] = useState(false);
   const [apiKeyMissing, setApiKeyMissing] = useState(false);
+  const [library, setLibrary] = useState<SavedBook[]>([]);
+  const [view, setView] = useState<'discover' | 'library'>('discover');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    fetchLibrary();
     const key = typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : (import.meta.env?.VITE_GEMINI_API_KEY as string);
-    if (!key || key === 'undefined') {
+    if (!key || key === 'undefined' || key === '') {
       setApiKeyMissing(true);
     }
   }, []);
+
+  const fetchLibrary = async () => {
+    try {
+      const data = await getLibraryBooks();
+      setLibrary(data || []);
+    } catch (err) {
+      console.error("Failed to fetch library", err);
+    }
+  };
+
+  const handleSaveToLibrary = async (book: GoogleBook) => {
+    setSaving(true);
+    try {
+      await saveBookToLibrary({
+        google_book_id: book.id,
+        title: book.volumeInfo.title,
+        author: book.volumeInfo.authors?.join(', ') || 'Unknown Author',
+        thumbnail: book.volumeInfo.imageLinks?.thumbnail || '',
+        description: book.volumeInfo.description || ''
+      });
+      await fetchLibrary();
+    } catch (err) {
+      console.error("Failed to save book", err);
+      alert("Failed to save book. Make sure you have a 'library' table in Supabase.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemoveFromLibrary = async (id: string) => {
+    try {
+      await removeBookFromLibrary(id);
+      await fetchLibrary();
+    } catch (err) {
+      console.error("Failed to remove book", err);
+    }
+  };
+
+  const isBookSaved = (id: string) => library.some(b => b.google_book_id === id);
 
   const searchBooks = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -111,14 +155,82 @@ export default function App() {
           </form>
 
           <div className="hidden sm:flex items-center gap-4 text-sm font-medium text-black/60">
-            <button className="hover:text-black transition-colors">Discover</button>
-            <button className="hover:text-black transition-colors">My Library</button>
+            <button 
+              onClick={() => setView('discover')}
+              className={cn("hover:text-black transition-colors", view === 'discover' && "text-black underline underline-offset-4")}
+            >
+              Discover
+            </button>
+            <button 
+              onClick={() => setView('library')}
+              className={cn("hover:text-black transition-colors", view === 'library' && "text-black underline underline-offset-4")}
+            >
+              My Library ({library.length})
+            </button>
           </div>
         </div>
       </header>
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-8">
-        {!books.length && !loading && !selectedBook && (
+        {view === 'library' ? (
+          <div>
+            <div className="mb-8">
+              <h2 className="text-4xl font-serif font-bold mb-2">My Library</h2>
+              <p className="text-black/40">Books you've saved for later.</p>
+            </div>
+            {library.length === 0 ? (
+              <div className="h-[40vh] flex flex-col items-center justify-center text-center">
+                <Bookmark className="w-12 h-12 text-black/10 mb-4" />
+                <p className="text-black/40">Your library is empty. Start searching and saving books!</p>
+                <button 
+                  onClick={() => setView('discover')}
+                  className="mt-4 px-6 py-2 bg-black text-white rounded-full text-sm font-medium"
+                >
+                  Go Discover
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {library.map((book) => (
+                  <motion.div
+                    key={book.google_book_id}
+                    layout
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="group bg-white p-4 rounded-2xl border border-black/5 book-card-shadow"
+                  >
+                    <div className="aspect-[3/4] mb-4 overflow-hidden rounded-lg bg-black/5 relative">
+                      {book.thumbnail ? (
+                        <img
+                          src={book.thumbnail.replace('http:', 'https:')}
+                          alt={book.title}
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-black/20">
+                          <BookIcon className="w-12 h-12" />
+                        </div>
+                      )}
+                      <div className="absolute top-2 right-2">
+                        <button 
+                          onClick={() => handleRemoveFromLibrary(book.google_book_id)}
+                          className="p-2 bg-white/80 backdrop-blur-md rounded-full text-red-500 hover:bg-red-50 transition-colors shadow-sm"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <h3 className="font-serif font-bold text-lg line-clamp-1">{book.title}</h3>
+                    <p className="text-sm text-black/50 font-medium">{book.author}</p>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            {!books.length && !loading && !selectedBook && (
           <div className="h-[60vh] flex flex-col items-center justify-center text-center">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -194,7 +306,9 @@ export default function App() {
             ))}
           </AnimatePresence>
         </div>
-      </main>
+      </>
+    )}
+  </main>
 
       {/* Book Detail Overlay */}
       <AnimatePresence>
@@ -261,9 +375,29 @@ export default function App() {
                     </div>
                     
                     <div className="mt-8 flex gap-3">
-                      <button className="flex-1 sm:flex-none px-6 py-3 bg-black text-white rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-black/80 transition-all">
-                        <Bookmark className="w-4 h-4" />
-                        Save to Library
+                      <button 
+                        onClick={() => handleSaveToLibrary(selectedBook)}
+                        disabled={saving || isBookSaved(selectedBook.id)}
+                        className={cn(
+                          "flex-1 sm:flex-none px-6 py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-all",
+                          isBookSaved(selectedBook.id) 
+                            ? "bg-green-50 text-green-600 border border-green-100 cursor-default"
+                            : "bg-black text-white hover:bg-black/80"
+                        )}
+                      >
+                        {saving ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : isBookSaved(selectedBook.id) ? (
+                          <>
+                            <Bookmark className="w-4 h-4 fill-current" />
+                            Saved
+                          </>
+                        ) : (
+                          <>
+                            <Bookmark className="w-4 h-4" />
+                            Save to Library
+                          </>
+                        )}
                       </button>
                       <button className="flex-1 sm:flex-none px-6 py-3 border border-black/10 rounded-xl font-medium hover:bg-black/5 transition-all">
                         Buy Now
